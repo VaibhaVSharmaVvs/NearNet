@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Index
 from geoalchemy2 import Geography
 from database import Base
 
@@ -27,7 +27,7 @@ class Request(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     location = Column(
-        Geography(geometry_type="POINT", srid=4326),
+        Geography(geometry_type="POINT", srid=4326, spatial_index=False),
         nullable=False,
     )
     created_at = Column(
@@ -36,3 +36,12 @@ class Request(Base):
         nullable=False,
     )
     is_active = Column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "requests_active_location_idx",
+            "location",
+            postgresql_using="gist",
+            postgresql_where=(is_active == True),
+        ),
+    )
