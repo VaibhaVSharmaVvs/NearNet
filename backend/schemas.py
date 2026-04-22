@@ -17,6 +17,7 @@ class RequestOut(BaseModel):
     latitude: float
     longitude: float
     created_at: datetime.datetime
+    expires_at: datetime.datetime
     is_active: bool
 
     model_config = {"from_attributes": True}

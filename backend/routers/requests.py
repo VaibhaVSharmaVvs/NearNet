@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
+import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 from typing import List
 
 from database import get_db
@@ -46,6 +47,7 @@ def get_nearby_requests(
         db.query(models.Request)
         .filter(
             models.Request.is_active == True,
+            models.Request.expires_at > func.now(),
             text(
                 "ST_DWithin("
                 "  location,"
@@ -65,7 +67,10 @@ def list_all_requests(db: Session = Depends(get_db)):
     """List all active requests (debug/testing endpoint)."""
     return (
         db.query(models.Request)
-        .filter(models.Request.is_active == True)
+        .filter(
+            models.Request.is_active == True,
+            models.Request.expires_at > func.now(),
+        )
         .order_by(models.Request.created_at.desc())
         .all()
     )

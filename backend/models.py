@@ -31,8 +31,13 @@ class Request(Base):
         nullable=False,
     )
     created_at = Column(
-        DateTime,
-        default=datetime.datetime.utcnow,
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    expires_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24),
         nullable=False,
     )
     is_active = Column(Boolean, default=True, nullable=False)
