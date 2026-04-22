@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Index
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Index, ForeignKey, CheckConstraint
 from geoalchemy2 import Geography
 from database import Base
 
@@ -41,12 +41,15 @@ class Request(Base):
         nullable=False,
     )
     is_active = Column(Boolean, default=True, nullable=False)
+    status = Column(String(20), default="pending", nullable=False)
+    accepted_by_vendor_id = Column(Integer, ForeignKey("vendors.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
+        CheckConstraint(status.in_(["pending", "accepted", "completed", "cancelled"]), name="status_check"),
         Index(
             "requests_active_location_idx",
             "location",
             postgresql_using="gist",
-            postgresql_where=(is_active == True),
+            postgresql_where=(status == 'pending'),
         ),
     )

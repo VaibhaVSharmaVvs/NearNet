@@ -19,8 +19,13 @@ class RequestOut(BaseModel):
     created_at: datetime.datetime
     expires_at: datetime.datetime
     is_active: bool
+    status: str
+    accepted_by_vendor_id: int | None = None
 
     model_config = {"from_attributes": True}
+
+class RequestAccept(BaseModel):
+    vendor_id: int
 
 
 class VendorOut(BaseModel):
