@@ -50,13 +50,28 @@ const vendorIcon = L.divIcon({
   popupAnchor:[0, -14],
 })
 
-// ── Request marker: orange pin ───────────────────────────
+// ── Request marker: orange pin (Pending) ───────────────────────────
 const requestIcon = L.divIcon({
   className: '',
   html: `
     <svg width="28" height="38" viewBox="0 0 28 38" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M14 0C6.268 0 0 6.268 0 14c0 9.941 14 24 14 24S28 23.941 28 14C28 6.268 21.732 0 14 0z" fill="#f59e0b"/>
       <path d="M14 1C6.82 1 1 6.82 1 14c0 9.3 13 23 13 23S27 23.3 27 14C27 6.82 21.18 1 14 1z" fill="#fbbf24" opacity="0.4"/>
+      <circle cx="14" cy="14" r="5.5" fill="white"/>
+    </svg>
+  `,
+  iconSize:   [28, 38],
+  iconAnchor: [14, 38],
+  popupAnchor:[0, -40],
+})
+
+// ── Accepted marker: green pin (Claimed) ───────────────────────────
+const acceptedIcon = L.divIcon({
+  className: '',
+  html: `
+    <svg width="28" height="38" viewBox="0 0 28 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 0C6.268 0 0 6.268 0 14c0 9.941 14 24 14 24S28 23.941 28 14C28 6.268 21.732 0 14 0z" fill="#10b981"/>
+      <path d="M14 1C6.82 1 1 6.82 1 14c0 9.3 13 23 13 23S27 23.3 27 14C27 6.82 21.18 1 14 1z" fill="#34d399" opacity="0.4"/>
       <circle cx="14" cy="14" r="5.5" fill="white"/>
     </svg>
   `,
@@ -75,7 +90,7 @@ function RecenterMap({ center }) {
 }
 
 // ── MapView component ────────────────────────────────────
-export default function MapView({ vendor, requests }) {
+export default function MapView({ vendor, requests, onAccept, acceptingId }) {
   const center = [vendor.latitude, vendor.longitude]
 
   return (
@@ -112,7 +127,7 @@ export default function MapView({ vendor, requests }) {
         <Marker
           key={req.id}
           position={[req.latitude, req.longitude]}
-          icon={requestIcon}
+          icon={req.status === 'accepted' ? acceptedIcon : requestIcon}
         >
           <Popup>
             <div className="popup-content">
@@ -123,9 +138,21 @@ export default function MapView({ vendor, requests }) {
                 <br />
                 🕒 {new Date(req.created_at).toLocaleString()}
               </div>
-              <button className="popup-chat-btn" disabled title="Coming in next release">
-                💬 Chat — Coming Soon
-              </button>
+              
+              {req.status === 'pending' ? (
+                <button 
+                  className="popup-chat-btn" 
+                  style={{ backgroundColor: '#10b981', color: 'white' }}
+                  onClick={() => onAccept(req.id)}
+                  disabled={acceptingId === req.id}
+                >
+                  {acceptingId === req.id ? '⏳ Accepting...' : '✅ Accept Request'}
+                </button>
+              ) : (
+                <button className="popup-chat-btn" disabled style={{ backgroundColor: '#374151' }}>
+                  🟢 Claimed (Assigned to You)
+                </button>
+              )}
             </div>
           </Popup>
         </Marker>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getVendors, getNearbyRequests } from '../api/client'
+import { getVendors, getNearbyRequests, acceptRequest } from '../api/client'
 import MapView from '../components/MapView'
 
 const POLL_INTERVAL = 5000 // ms
@@ -12,6 +12,7 @@ export default function VendorPage() {
   const [polling, setPolling] = useState(false)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [apiError, setApiError] = useState(null)
+  const [acceptingId, setAcceptingId] = useState(null)
   const intervalRef = useRef(null)
 
   const selectedVendor = vendors.find((v) => String(v.id) === String(selectedId)) ?? null
@@ -27,12 +28,13 @@ export default function VendorPage() {
   const fetchRequests = useCallback(async () => {
     if (!selectedVendor) return
     try {
-      const res = await getNearbyRequests(
+      const data = await getNearbyRequests(
         selectedVendor.latitude,
         selectedVendor.longitude,
         radius,
+        selectedVendor.id
       )
-      setRequests(res.data)
+      setRequests(data)
       setLastUpdated(new Date())
       setApiError(null)
     } catch {
@@ -59,6 +61,27 @@ export default function VendorPage() {
 
     return () => clearInterval(intervalRef.current)
   }, [selectedVendor, radius, fetchRequests])
+
+  // ── Handlers ───────────────────────────────────────────
+  const handleAccept = async (requestId) => {
+    if (!selectedVendor) return;
+    setAcceptingId(requestId);
+    setApiError(null);
+    try {
+      await acceptRequest(requestId, selectedVendor.id);
+      
+      // UX Fix: Debounce/Restart polling so a fetch doesn't overwrite our success state instantly
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      await fetchRequests(); // Refresh data immediately
+      intervalRef.current = setInterval(fetchRequests, POLL_INTERVAL);
+    } catch (err) {
+      setApiError(err.message || 'Failed to accept request.');
+    } finally {
+      setAcceptingId(null);
+    }
+  };
 
   // ── Helpers ────────────────────────────────────────────
   const fmtTime = (d) =>
@@ -170,8 +193,10 @@ export default function VendorPage() {
               </div>
             ) : (
               requests.map((req) => (
-                <div key={req.id} className="request-item fade-in">
-                  <div className="request-item-name">👤 {req.customer_name}</div>
+                <div key={req.id} className="request-item fade-in" style={{ borderLeft: req.status === 'accepted' ? '3px solid #10b981' : 'none' }}>
+                  <div className="request-item-name">
+                    {req.status === 'accepted' ? '🟢 Claimed by you' : `👤 ${req.customer_name}`}
+                  </div>
                   <div className="request-item-desc">{req.description}</div>
                   <div className="request-item-meta">
                     📍 {req.latitude.toFixed(4)}, {req.longitude.toFixed(4)}&nbsp;·&nbsp;
@@ -195,7 +220,12 @@ export default function VendorPage() {
       {/* ════════════════════════════════ MAP ══════════ */}
       <div className="map-container">
         {selectedVendor ? (
-          <MapView vendor={selectedVendor} requests={requests} />
+          <MapView 
+            vendor={selectedVendor} 
+            requests={requests} 
+            onAccept={handleAccept} 
+            acceptingId={acceptingId} 
+          />
         ) : (
           <div className="map-placeholder">
             <div className="map-placeholder-icon">🗺️</div>
