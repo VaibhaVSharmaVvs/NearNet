@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -90,7 +90,7 @@ function RecenterMap({ center }) {
 }
 
 // ── MapView component ────────────────────────────────────
-export default function MapView({ vendor, requests, onAccept, acceptingId, onOpenChat, onQuit }) {
+export default function MapView({ vendor, requests, onAccept, acceptingId, onOpenChat, onQuit, radius }) {
   const center = [vendor.latitude, vendor.longitude]
 
   return (
@@ -121,6 +121,21 @@ export default function MapView({ vendor, requests, onAccept, acceptingId, onOpe
           </div>
         </Popup>
       </Marker>
+
+      {/* Visualizing the search radius */}
+      {radius && (
+        <Circle 
+          center={center} 
+          radius={radius} 
+          pathOptions={{ 
+            color: '#3b82f6', 
+            fillColor: '#3b82f6', 
+            fillOpacity: 0.08, 
+            weight: 1.5,
+            dashArray: '4 4'
+          }} 
+        />
+      )}
 
       {/* Request markers */}
       {requests.map((req) => (
