@@ -96,6 +96,8 @@ export default function CustomerPage() {
         longitude: parseFloat(form.longitude),
       })
       setActiveRequestId(reqData.data.id)
+      setActiveRequest(null)
+      setHasMessages(false)
       setToast({
         type: 'success',
         msg: '✅ Request submitted! Vendors nearby can now accept and chat.',
@@ -125,18 +127,9 @@ export default function CustomerPage() {
           </div>
           
           {(activeRequest?.status === 'accepted' || hasMessages) ? (
-            <>
-              <div style={{ flex: 1, position: 'relative', width: '100%', minHeight: '300px' }}>
-                <ChatBox requestId={activeRequestId} senderType="customer" />
-              </div>
-              <button 
-                className="btn btn-primary" 
-                style={{ backgroundColor: '#10b981', color: 'white', marginTop: '1rem', width: '100%' }} 
-                onClick={() => handleAction('complete')}
-              >
-                ✅ Mark Job Finished
-              </button>
-            </>
+            <div style={{ flex: 1, position: 'relative', width: '100%', minHeight: '300px' }}>
+              <ChatBox requestId={activeRequestId} senderType="customer" />
+            </div>
           ) : (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                <div className="spinner" style={{ width: '40px', height: '40px', borderTopColor: 'var(--accent)', marginBottom: '1rem' }}></div>
@@ -144,7 +137,15 @@ export default function CustomerPage() {
             </div>
           )}
 
-          {(!activeRequest || activeRequest.status === 'pending') && (
+          {activeRequest?.status === 'accepted' ? (
+            <button 
+              className="btn btn-primary" 
+              style={{ backgroundColor: '#10b981', color: 'white', marginTop: '1rem', width: '100%' }} 
+              onClick={() => handleAction('complete')}
+            >
+              ✅ Mark Job Finished
+            </button>
+          ) : (
             <button 
               className="btn btn-primary" 
               style={{ backgroundColor: '#ef4444', color: 'white', marginTop: '1rem', width: '100%' }} 

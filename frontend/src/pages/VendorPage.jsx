@@ -113,7 +113,9 @@ export default function VendorPage() {
     m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`
 
   const fmtAge = (iso) => {
-    const diff = Date.now() - new Date(iso).getTime()
+    // Backend may return naive datetimes if timezone=True wasn't fully applied retroactively
+    const isoString = (iso && !iso.endsWith('Z') && !iso.includes('+')) ? iso + 'Z' : iso;
+    const diff = Date.now() - new Date(isoString).getTime()
     const mins = Math.floor(diff / 60_000)
     if (mins < 1) return 'just now'
     if (mins < 60) return `${mins}m ago`
