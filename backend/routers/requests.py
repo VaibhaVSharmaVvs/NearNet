@@ -60,7 +60,7 @@ def get_nearby_requests(
         filters.append(
             or_(
                 models.Request.status == "pending",
-                models.Request.accepted_by_vendor_id == vendor_id
+                and_(models.Request.status == "accepted", models.Request.accepted_by_vendor_id == vendor_id)
             )
         )
     else:
@@ -81,6 +81,16 @@ def accept_request(request_id: int, payload: schemas.RequestAccept, db: Session 
     vendor_exists = db.query(models.Vendor).filter(models.Vendor.id == payload.vendor_id).first()
     if not vendor_exists:
         raise HTTPException(status_code=404, detail="Vendor not found")
+
+    # Prevent vendor from hoarding requests
+    active_for_vendor = db.query(models.Request).filter(
+        models.Request.accepted_by_vendor_id == payload.vendor_id,
+        models.Request.status == "accepted",
+        models.Request.is_active == True,
+        models.Request.expires_at > func.now()
+    ).first()
+    if active_for_vendor and active_for_vendor.id != request_id:
+        raise HTTPException(status_code=409, detail="You already have an active request. Complete or quit it first.")
 
     stmt = (
         update(models.Request)
@@ -112,6 +122,48 @@ def accept_request(request_id: int, payload: schemas.RequestAccept, db: Session 
     return db.query(models.Request).get(request_id)
 
 
+@router.get("/{request_id}", response_model=schemas.RequestOut)
+def get_request(request_id: int, db: Session = Depends(get_db)):
+    """Fetch a single request by ID."""
+    req = db.query(models.Request).filter(models.Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return req
+
+
+@router.patch("/{request_id}/status", response_model=schemas.RequestOut)
+def update_status(request_id: int, payload: schemas.RequestStatusUpdate, db: Session = Depends(get_db)):
+    """Update the status of a request (Complete, Cancel, or Quit)."""
+    req = db.query(models.Request).filter(models.Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    if payload.actor_type == "customer":
+        if payload.action == "cancel":
+            req.status = "cancelled"
+            req.is_active = False
+        elif payload.action == "complete":
+            if req.status != "accepted":
+                raise HTTPException(status_code=400, detail="Can only complete an accepted request.")
+            req.status = "completed"
+            req.is_active = False
+        else:
+            raise HTTPException(status_code=400, detail="Invalid action for customer.")
+            
+    elif payload.actor_type == "vendor":
+        if payload.action == "quit":
+            if req.status != "accepted":
+                raise HTTPException(status_code=400, detail="Can only quit an accepted request.")
+            req.status = "pending"
+            req.accepted_by_vendor_id = None
+        else:
+            raise HTTPException(status_code=400, detail="Invalid action for vendor.")
+            
+    db.commit()
+    db.refresh(req)
+    return req
+
+
 @router.get("", response_model=List[schemas.RequestOut])
 def list_all_requests(db: Session = Depends(get_db)):
     """List all active requests (debug/testing endpoint)."""
@@ -124,3 +176,35 @@ def list_all_requests(db: Session = Depends(get_db)):
         .order_by(models.Request.created_at.desc())
         .all()
     )
+
+
+@router.get("/{request_id}/messages", response_model=List[schemas.MessageOut])
+def get_messages(request_id: int, db: Session = Depends(get_db)):
+    """Fetch all messages for a specific request."""
+    req = db.query(models.Request).filter(models.Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    return (
+        db.query(models.Message)
+        .filter(models.Message.request_id == request_id)
+        .order_by(models.Message.timestamp.asc(), models.Message.id.asc())
+        .all()
+    )
+
+@router.post("/{request_id}/messages", response_model=schemas.MessageOut, status_code=201)
+def create_message(request_id: int, payload: schemas.MessageCreate, db: Session = Depends(get_db)):
+    """Add a new message to a specific request."""
+    req = db.query(models.Request).filter(models.Request.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    msg = models.Message(
+        request_id=request_id,
+        sender_type=payload.sender_type,
+        message=payload.message
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg

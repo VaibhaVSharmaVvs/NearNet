@@ -90,7 +90,7 @@ function RecenterMap({ center }) {
 }
 
 // ── MapView component ────────────────────────────────────
-export default function MapView({ vendor, requests, onAccept, acceptingId }) {
+export default function MapView({ vendor, requests, onAccept, acceptingId, onOpenChat, onQuit }) {
   const center = [vendor.latitude, vendor.longitude]
 
   return (
@@ -139,20 +139,33 @@ export default function MapView({ vendor, requests, onAccept, acceptingId }) {
                 🕒 {new Date(req.created_at).toLocaleString()}
               </div>
               
-              {req.status === 'pending' ? (
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                 <button 
                   className="popup-chat-btn" 
-                  style={{ backgroundColor: '#10b981', color: 'white' }}
-                  onClick={() => onAccept(req.id)}
-                  disabled={acceptingId === req.id}
+                  style={{ backgroundColor: '#4f90f8', color: 'white', flex: 1, cursor: 'pointer', opacity: 1 }}
+                  onClick={() => onOpenChat(req.id)}
                 >
-                  {acceptingId === req.id ? '⏳ Accepting...' : '✅ Accept Request'}
+                  💬 Chat
                 </button>
-              ) : (
-                <button className="popup-chat-btn" disabled style={{ backgroundColor: '#374151' }}>
-                  🟢 Claimed (Assigned to You)
-                </button>
-              )}
+                {req.status === 'pending' ? (
+                  <button 
+                    className="popup-chat-btn" 
+                    style={{ backgroundColor: '#10b981', color: 'white', flex: 1, cursor: 'pointer', opacity: 1 }}
+                    onClick={() => onAccept(req.id)}
+                    disabled={acceptingId === req.id}
+                  >
+                    {acceptingId === req.id ? '⏳ ...' : '✅ Accept'}
+                  </button>
+                ) : (
+                  <button 
+                    className="popup-chat-btn" 
+                    onClick={() => onQuit(req.id)}
+                    style={{ backgroundColor: '#ef4444', color: 'white', flex: 1, cursor: 'pointer', opacity: 1 }}
+                  >
+                    ❌ Quit Job
+                  </button>
+                )}
+              </div>
             </div>
           </Popup>
         </Marker>

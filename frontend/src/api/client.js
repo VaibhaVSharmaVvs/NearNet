@@ -41,7 +41,46 @@ export const acceptRequest = async (requestId, vendorId) => {
   return res.json();
 };
 
-/** List all vendors */
 export const getVendors = () => client.get('/vendors')
+
+export const getMessages = async (requestId) => {
+  const res = await fetch(`${API_BASE}/requests/${requestId}/messages`);
+  if (!res.ok) throw new Error("Failed to fetch messages");
+  return res.json();
+};
+
+export const sendMessage = async (requestId, senderType, message) => {
+  const res = await fetch(`${API_BASE}/requests/${requestId}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ sender_type: senderType, message }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || "Failed to send message");
+  }
+  return res.json();
+};
+
+export const getRequest = async (requestId) => {
+  const res = await fetch(`${API_BASE}/requests/${requestId}`);
+  if (!res.ok) throw new Error("Failed to fetch request");
+  return res.json();
+};
+
+export const updateRequestStatus = async (requestId, action, actorType) => {
+  const res = await fetch(`${API_BASE}/requests/${requestId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, actor_type: actorType }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || "Failed to update status");
+  }
+  return res.json();
+};
 
 export default client

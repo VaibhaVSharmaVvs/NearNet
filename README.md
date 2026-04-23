@@ -65,7 +65,7 @@ GeoLocate/
 docker compose up -d
 ```
 
-This starts a `postgis/postgis:15-3.3` container on port **5432**.
+This starts a `postgis/postgis:15-3.3` container. **Note:** Due to potential native PostgreSQL conflicts, this runs exposed on host port **5433**.
 The PostGIS extension is enabled automatically by the backend on first startup.
 
 Verify it's healthy:
@@ -145,6 +145,17 @@ Return active requests within radius of a vendor location.
 | `lat` | float | required | Vendor latitude |
 | `lng` | float | required | Vendor longitude |
 | `radius` | float | 5000 | Search radius in **metres** |
+| `vendor_id` | int | optional | Vendor ID to include jobs claimed by them |
+
+### `POST /requests/{request_id}/accept`
+Atomically assigns a pending request to a specific vendor using an enforced DB state check.
+
+**Body (JSON):**
+```json
+{
+  "vendor_id": 1
+}
+```
 
 ### `GET /vendors`
 List all seeded vendors.
@@ -168,7 +179,7 @@ List all seeded vendors.
 
 | Setting | Where | Default |
 |---------|-------|---------|
-| Database URL | `backend/.env` | `postgresql://postgres:postgres@localhost:5432/geolocate` |
+| Database URL | `backend/.env` | `postgresql://postgres:postgres@127.0.0.1:5433/geolocate` |
 | Poll interval | `frontend/src/pages/VendorPage.jsx` | `5000` ms |
 | Default radius | `frontend/src/pages/VendorPage.jsx` | `5000` m |
 | API base URL | `frontend/src/api/client.js` | `http://localhost:8000` |
@@ -193,7 +204,7 @@ ST_DWithin(
 ## Future Extensions (not implemented)
 
 - [ ] WebSocket push instead of polling
-- [ ] Vendor accepts / rejects a request
+- [x] Vendor accepts / rejects a request (Atomic Marketplace Lock implemented)
 - [ ] In-app chat between customer and vendor
 - [ ] User authentication (JWT)
 - [ ] Push notifications
