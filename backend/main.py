@@ -5,6 +5,7 @@ from database import engine, enable_postgis
 import models
 from routers import requests as requests_router
 from routers import vendors as vendors_router
+from routers import websockets as websockets_router
 
 app = FastAPI(
     title="GeoLocate API",
@@ -30,6 +31,7 @@ def on_startup():
 
 app.include_router(requests_router.router)
 app.include_router(vendors_router.router)
+app.include_router(websockets_router.router)
 
 
 @app.get("/", tags=["health"])

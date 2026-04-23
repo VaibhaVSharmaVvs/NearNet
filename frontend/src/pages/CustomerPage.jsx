@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createRequest, getRequest, getMessages, updateRequestStatus } from '../api/client'
+import { createRequest, getRequest, getMessages, updateRequestStatus, API_BASE } from '../api/client'
 import ChatBox from '../components/ChatBox'
 
 export default function CustomerPage() {
@@ -14,35 +14,63 @@ export default function CustomerPage() {
   const [toast, setToast] = useState(null)
   const [activeRequestId, setActiveRequestId] = useState(null)
   
-  const [activeRequest, setActiveRequest] = useState(null)
-  const [hasMessages, setHasMessages] = useState(false)
-
-  // Poll for request state
+  // WebSocket for request state
   useEffect(() => {
-    let interval;
-    const checkState = async () => {
+    let ws = null;
+    let reconnectTimeout = null;
+
+    const connectWebSocket = () => {
       if (!activeRequestId) return;
-      try {
-        const req = await getRequest(activeRequestId)
-        setActiveRequest(req)
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = API_BASE.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProtocol}//${host}/ws/request/${activeRequestId}`;
+      
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        getRequest(activeRequestId).then(req => {
+            setActiveRequest(req);
+            if (!req.is_active && req.status === 'cancelled') {
+              setActiveRequestId(null);
+              setToast({ type: 'error', msg: 'Request was cancelled or expired.' });
+            }
+        }).catch(console.error);
         
-        const msgs = await getMessages(activeRequestId)
-        if (msgs.length > 0) setHasMessages(true)
-        
-        if (!req.is_active && req.status === 'cancelled') {
-          setActiveRequestId(null)
-          setToast({ type: 'error', msg: 'Request was cancelled or expired.' })
+        getMessages(activeRequestId).then(msgs => {
+            if (msgs.length > 0) setHasMessages(true);
+        }).catch(console.error);
+      };
+
+      ws.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'status_update') {
+          const req = payload.data;
+          setActiveRequest(req);
+          if (!req.is_active && req.status === 'cancelled') {
+            setActiveRequestId(null);
+            setToast({ type: 'error', msg: 'Request was cancelled or expired.' });
+          }
+        } else if (payload.type === 'new_message') {
+          setHasMessages(true);
         }
-      } catch (e) {
-        console.error(e)
-      }
-    }
-    
+      };
+
+      ws.onclose = () => {
+        reconnectTimeout = setTimeout(connectWebSocket, 3000);
+      };
+    };
+
     if (activeRequestId) {
-      checkState()
-      interval = setInterval(checkState, 3000)
+      connectWebSocket();
     }
-    return () => clearInterval(interval)
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, [activeRequestId])
 
   const handleAction = async (action) => {

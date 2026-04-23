@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { getVendors, getNearbyRequests, acceptRequest, updateRequestStatus } from '../api/client'
 import MapView from '../components/MapView'
 import ChatBox from '../components/ChatBox'
-
-const POLL_INTERVAL = 5000 // ms
+import { API_BASE } from '../api/client'
 
 export default function VendorPage() {
   const [vendors, setVendors] = useState([])
@@ -44,26 +43,92 @@ export default function VendorPage() {
     }
   }, [selectedVendor, radius])
 
-  // Start/stop polling when vendor or radius changes
+  // ── WebSocket Connection & Real-time Updates ───────────
   useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-
     if (!selectedVendor) {
       setRequests([])
-      setPolling(false)
       setActiveChatRequest(null)
       return
     }
 
-    fetchRequests() // immediate first call
-    setPolling(true)
-    intervalRef.current = setInterval(fetchRequests, POLL_INTERVAL)
+    let ws = null;
+    let reconnectTimeout = null;
 
-    return () => clearInterval(intervalRef.current)
+    const connectWebSocket = () => {
+      // Build WS URL
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = API_BASE.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProtocol}//${host}/ws/vendor/${selectedVendor.id}?lat=${selectedVendor.latitude}&lng=${selectedVendor.longitude}&radius=${radius}`;
+      
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setApiError(null);
+        setPolling(true); // Re-using this flag as 'connected' indicator visually
+        fetchRequests(); // Fetch full state to sync
+      };
+
+      ws.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'new_request') {
+          const req = payload.data;
+          // Client-side Geo Filtering check
+          const dist = getDistance(selectedVendor.latitude, selectedVendor.longitude, req.latitude, req.longitude);
+          if (dist <= radius) {
+            setRequests(prev => {
+              if (prev.find(r => r.id === req.id)) return prev;
+              return [req, ...prev];
+            });
+            setLastUpdated(new Date());
+          }
+        } else if (payload.type === 'status_update') {
+          const updatedReq = payload.data;
+          setRequests(prev => {
+            if (!updatedReq.is_active || updatedReq.status === 'completed' || updatedReq.status === 'cancelled') {
+              return prev.filter(r => r.id !== updatedReq.id);
+            }
+            const exists = prev.find(r => r.id === updatedReq.id);
+            if (exists) {
+              return prev.map(r => r.id === updatedReq.id ? updatedReq : r);
+            }
+            if (updatedReq.status === 'accepted' && updatedReq.accepted_by_vendor_id === selectedVendor.id) {
+               return [updatedReq, ...prev];
+            }
+            return prev;
+          });
+          setLastUpdated(new Date());
+        }
+      };
+
+      ws.onclose = () => {
+        setPolling(false);
+        setApiError('Connection lost. Reconnecting...');
+        reconnectTimeout = setTimeout(connectWebSocket, 3000);
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; 
+        ws.close();
+      }
+    };
   }, [selectedVendor, radius, fetchRequests])
+
+  // Haversine formula for exact circle precision matching the UI overlay
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; 
+    const p1 = lat1 * Math.PI/180;
+    const p2 = lat2 * Math.PI/180;
+    const dp = (lat2-lat1) * Math.PI/180;
+    const dl = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
 
   // ── Handlers ───────────────────────────────────────────
   const handleAccept = async (requestId) => {
@@ -73,12 +138,9 @@ export default function VendorPage() {
     try {
       await acceptRequest(requestId, selectedVendor.id);
       
-      // UX Fix: Debounce/Restart polling so a fetch doesn't overwrite our success state instantly
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      await fetchRequests(); // Refresh data immediately
-      intervalRef.current = setInterval(fetchRequests, POLL_INTERVAL);
+      // UX Fix: The websocket will push the update back to us instantly.
+      // But we can also refresh manually if we want to guarantee sync.
+      await fetchRequests();
     } catch (err) {
       setApiError(err.message || 'Failed to accept request.');
     } finally {
@@ -96,9 +158,8 @@ export default function VendorPage() {
     try {
       await updateRequestStatus(requestId, 'quit', 'vendor');
       
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      // Websocket will handle the state update instantly
       await fetchRequests();
-      intervalRef.current = setInterval(fetchRequests, POLL_INTERVAL);
       if (activeChatRequest === requestId) setActiveChatRequest(null);
     } catch (err) {
       setApiError(err.message || 'Failed to quit request.');
