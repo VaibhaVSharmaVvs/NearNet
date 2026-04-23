@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getMessages, sendMessage } from '../api/client'
+import { getMessages, sendMessage, API_BASE } from '../api/client'
 
 export default function ChatBox({ requestId, senderType, onClose }) {
   const [messages, setMessages] = useState([])
@@ -17,9 +17,46 @@ export default function ChatBox({ requestId, senderType, onClose }) {
   }
 
   useEffect(() => {
-    fetchMessages()
-    const interval = setInterval(fetchMessages, 3000)
-    return () => clearInterval(interval)
+    let ws = null;
+    let reconnectTimeout = null;
+
+    const connectWebSocket = () => {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = API_BASE.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProtocol}//${host}/ws/request/${requestId}`;
+      
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        fetchMessages(); // Fetch missed messages on connect
+      };
+
+      ws.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'new_message') {
+          const msg = payload.data;
+          setMessages(prev => {
+            // Deduplicate
+            if (prev.find(m => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimeout = setTimeout(connectWebSocket, 3000);
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, [requestId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

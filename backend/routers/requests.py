@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 import datetime
+import asyncio
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, update, and_, or_
 from typing import List
+from fastapi.encoders import jsonable_encoder
 
 from database import get_db
 import models
 import schemas
+from ws_manager import manager, get_grid_cell
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
@@ -27,6 +30,12 @@ def create_request(req: schemas.RequestCreate, db: Session = Depends(get_db)):
     db.add(db_req)
     db.commit()
     db.refresh(db_req)
+    
+    # Broadcast to geo bucket
+    cell = get_grid_cell(db_req.latitude, db_req.longitude)
+    payload = {"type": "new_request", "data": jsonable_encoder(db_req)}
+    asyncio.create_task(manager.broadcast(cell, payload))
+    
     return db_req
 
 
@@ -119,7 +128,14 @@ def accept_request(request_id: int, payload: schemas.RequestAccept, db: Session 
         raise HTTPException(status_code=409, detail="Request is no longer available or already taken")
         
     db.commit()
-    return db.query(models.Request).get(request_id)
+    req = db.query(models.Request).get(request_id)
+    
+    payload = {"type": "status_update", "data": jsonable_encoder(req)}
+    cell = get_grid_cell(req.latitude, req.longitude)
+    asyncio.create_task(manager.broadcast(cell, payload))
+    asyncio.create_task(manager.broadcast(f"request_{request_id}", payload))
+    
+    return req
 
 
 @router.get("/{request_id}", response_model=schemas.RequestOut)
@@ -161,6 +177,12 @@ def update_status(request_id: int, payload: schemas.RequestStatusUpdate, db: Ses
             
     db.commit()
     db.refresh(req)
+    
+    payload = {"type": "status_update", "data": jsonable_encoder(req)}
+    cell = get_grid_cell(req.latitude, req.longitude)
+    asyncio.create_task(manager.broadcast(cell, payload))
+    asyncio.create_task(manager.broadcast(f"request_{request_id}", payload))
+    
     return req
 
 
@@ -207,4 +229,8 @@ def create_message(request_id: int, payload: schemas.MessageCreate, db: Session 
     db.add(msg)
     db.commit()
     db.refresh(msg)
+    
+    payload = {"type": "new_message", "data": jsonable_encoder(msg)}
+    asyncio.create_task(manager.broadcast(f"request_{request_id}", payload))
+    
     return msg
