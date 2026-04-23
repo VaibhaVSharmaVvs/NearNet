@@ -53,3 +53,20 @@ class Request(Base):
             postgresql_where=(status == 'pending'),
         ),
     )
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(Integer, ForeignKey("requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender_type = Column(String(20), nullable=False)
+    message = Column(String, nullable=False)
+    timestamp = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(sender_type.in_(["vendor", "customer"]), name="sender_type_check"),
+    )

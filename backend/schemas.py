@@ -35,3 +35,20 @@ class VendorOut(BaseModel):
     longitude: float
 
     model_config = {"from_attributes": True}
+
+class MessageCreate(BaseModel):
+    sender_type: str = Field(..., pattern="^(vendor|customer)$")
+    message: str = Field(..., min_length=1, max_length=1000)
+
+class MessageOut(BaseModel):
+    id: int
+    request_id: int
+    sender_type: str
+    message: str
+    timestamp: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+class RequestStatusUpdate(BaseModel):
+    action: str = Field(..., pattern="^(complete|cancel|quit)$")
+    actor_type: str = Field(..., pattern="^(customer|vendor)$")

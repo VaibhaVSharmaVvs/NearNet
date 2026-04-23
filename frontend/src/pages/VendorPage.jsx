@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getVendors, getNearbyRequests, acceptRequest } from '../api/client'
+import { getVendors, getNearbyRequests, acceptRequest, updateRequestStatus } from '../api/client'
 import MapView from '../components/MapView'
+import ChatBox from '../components/ChatBox'
 
 const POLL_INTERVAL = 5000 // ms
 
@@ -13,6 +14,7 @@ export default function VendorPage() {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [apiError, setApiError] = useState(null)
   const [acceptingId, setAcceptingId] = useState(null)
+  const [activeChatRequest, setActiveChatRequest] = useState(null)
   const intervalRef = useRef(null)
 
   const selectedVendor = vendors.find((v) => String(v.id) === String(selectedId)) ?? null
@@ -52,6 +54,7 @@ export default function VendorPage() {
     if (!selectedVendor) {
       setRequests([])
       setPolling(false)
+      setActiveChatRequest(null)
       return
     }
 
@@ -80,6 +83,25 @@ export default function VendorPage() {
       setApiError(err.message || 'Failed to accept request.');
     } finally {
       setAcceptingId(null);
+    }
+  };
+
+  const handleOpenChat = (requestId) => {
+    setActiveChatRequest(requestId);
+  };
+
+  const handleQuit = async (requestId) => {
+    if (!selectedVendor) return;
+    setApiError(null);
+    try {
+      await updateRequestStatus(requestId, 'quit', 'vendor');
+      
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      await fetchRequests();
+      intervalRef.current = setInterval(fetchRequests, POLL_INTERVAL);
+      if (activeChatRequest === requestId) setActiveChatRequest(null);
+    } catch (err) {
+      setApiError(err.message || 'Failed to quit request.');
     }
   };
 
@@ -198,9 +220,16 @@ export default function VendorPage() {
                     {req.status === 'accepted' ? '🟢 Claimed by you' : `👤 ${req.customer_name}`}
                   </div>
                   <div className="request-item-desc">{req.description}</div>
-                  <div className="request-item-meta">
-                    📍 {req.latitude.toFixed(4)}, {req.longitude.toFixed(4)}&nbsp;·&nbsp;
-                    {fmtAge(req.created_at)}
+                  <div className="request-item-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem' }}>
+                    <span>📍 {req.latitude.toFixed(4)}, {req.longitude.toFixed(4)}&nbsp;·&nbsp;{fmtAge(req.created_at)}</span>
+                    {req.status === 'accepted' && (
+                      <button 
+                        onClick={() => handleQuit(req.id)}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Quit Job
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -220,12 +249,23 @@ export default function VendorPage() {
       {/* ════════════════════════════════ MAP ══════════ */}
       <div className="map-container">
         {selectedVendor ? (
-          <MapView 
-            vendor={selectedVendor} 
-            requests={requests} 
-            onAccept={handleAccept} 
-            acceptingId={acceptingId} 
-          />
+          <>
+            <MapView 
+              vendor={selectedVendor} 
+              requests={requests} 
+              onAccept={handleAccept} 
+              acceptingId={acceptingId} 
+              onOpenChat={handleOpenChat}
+              onQuit={handleQuit}
+            />
+            {activeChatRequest && (
+              <ChatBox 
+                requestId={activeChatRequest} 
+                senderType="vendor" 
+                onClose={() => setActiveChatRequest(null)} 
+              />
+            )}
+          </>
         ) : (
           <div className="map-placeholder">
             <div className="map-placeholder-icon">🗺️</div>
