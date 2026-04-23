@@ -259,6 +259,7 @@ export default function VendorPage() {
               acceptingId={acceptingId} 
               onOpenChat={handleOpenChat}
               onQuit={handleQuit}
+              radius={radius}
             />
             {activeChatRequest && (
               <ChatBox 
