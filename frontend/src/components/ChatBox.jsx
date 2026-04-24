@@ -19,6 +19,7 @@ export default function ChatBox({ requestId, senderType, onClose }) {
   useEffect(() => {
     let ws = null;
     let reconnectTimeout = null;
+    let pingInterval = null;
 
     const connectWebSocket = () => {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -29,6 +30,12 @@ export default function ChatBox({ requestId, senderType, onClose }) {
 
       ws.onopen = () => {
         fetchMessages(); // Fetch missed messages on connect
+        
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
       };
 
       ws.onmessage = (event) => {
@@ -44,6 +51,7 @@ export default function ChatBox({ requestId, senderType, onClose }) {
       };
 
       ws.onclose = () => {
+        if (pingInterval) clearInterval(pingInterval);
         reconnectTimeout = setTimeout(connectWebSocket, 3000);
       };
     };
@@ -52,6 +60,7 @@ export default function ChatBox({ requestId, senderType, onClose }) {
 
     return () => {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (pingInterval) clearInterval(pingInterval);
       if (ws) {
         ws.onclose = null;
         ws.close();
