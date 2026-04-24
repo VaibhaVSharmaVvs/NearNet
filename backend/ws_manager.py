@@ -61,8 +61,8 @@ class ConnectionManager:
     async def broadcast(self, channel: str, message: dict):
         if channel in self.channels:
             for connection in list(self.channels[channel]):
-                # Wrap in create_task to prevent slow clients from blocking the broadcast loop
-                asyncio.create_task(self._send_safe(connection, message))
+                task = asyncio.create_task(self._send_safe(connection, message))
+                task.add_done_callback(lambda t: t.exception())
 
     async def _send_safe(self, websocket: WebSocket, message: dict):
         try:
@@ -107,4 +107,8 @@ def get_vendor_subscription_cells(lat: float, lng: float, radius_m: float) -> li
         for cur_lng in range(start_lng, end_lng + 1):
             cells.add(f"geo_{cur_lat}_{cur_lng}")
             
-    return list(cells)
+    cells_list = list(cells)
+    if len(cells_list) > 25:
+        cells_list = cells_list[:25]
+        
+    return cells_list

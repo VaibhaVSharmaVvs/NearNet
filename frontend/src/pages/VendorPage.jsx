@@ -104,6 +104,10 @@ export default function VendorPage() {
             return prev;
           });
           setLastUpdated(new Date());
+        } else if (payload.type === 'remove_request') {
+          setRequests(prev => prev.filter(r => r.id !== payload.request_id));
+          setLastUpdated(new Date());
+          if (activeChatRequest === payload.request_id) setActiveChatRequest(null);
         }
       };
 

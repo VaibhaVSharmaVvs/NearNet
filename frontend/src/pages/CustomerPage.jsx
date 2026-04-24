@@ -57,6 +57,9 @@ export default function CustomerPage() {
             setActiveRequestId(null);
             setToast({ type: 'error', msg: 'Request was cancelled or expired.' });
           }
+        } else if (payload.type === 'remove_request') {
+          setActiveRequestId(null);
+          setToast({ type: 'success', msg: 'Request was completed or cancelled.' });
         } else if (payload.type === 'new_message') {
           setHasMessages(true);
         }

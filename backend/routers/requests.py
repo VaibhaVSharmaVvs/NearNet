@@ -180,7 +180,11 @@ def update_status(request_id: int, payload: schemas.RequestStatusUpdate, db: Ses
     db.commit()
     db.refresh(req)
     
-    payload = {"type": "status_update", "data": jsonable_encoder(req)}
+    if req.status in ["completed", "cancelled"]:
+        payload = {"type": "remove_request", "request_id": request_id}
+    else:
+        payload = {"type": "status_update", "data": jsonable_encoder(req)}
+        
     cells = get_request_broadcast_cells(req.latitude, req.longitude)
     for cell in cells:
         asyncio.create_task(manager.broadcast(cell, payload))
