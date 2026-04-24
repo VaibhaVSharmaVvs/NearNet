@@ -18,6 +18,7 @@ export default function CustomerPage() {
   useEffect(() => {
     let ws = null;
     let reconnectTimeout = null;
+    let pingInterval = null;
 
     const connectWebSocket = () => {
       if (!activeRequestId) return;
@@ -39,6 +40,12 @@ export default function CustomerPage() {
         getMessages(activeRequestId).then(msgs => {
             if (msgs.length > 0) setHasMessages(true);
         }).catch(console.error);
+        
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
       };
 
       ws.onmessage = (event) => {
@@ -50,12 +57,16 @@ export default function CustomerPage() {
             setActiveRequestId(null);
             setToast({ type: 'error', msg: 'Request was cancelled or expired.' });
           }
+        } else if (payload.type === 'remove_request') {
+          setActiveRequestId(null);
+          setToast({ type: 'success', msg: 'Request was completed or cancelled.' });
         } else if (payload.type === 'new_message') {
           setHasMessages(true);
         }
       };
 
       ws.onclose = () => {
+        if (pingInterval) clearInterval(pingInterval);
         reconnectTimeout = setTimeout(connectWebSocket, 3000);
       };
     };
@@ -66,6 +77,7 @@ export default function CustomerPage() {
 
     return () => {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (pingInterval) clearInterval(pingInterval);
       if (ws) {
         ws.onclose = null;
         ws.close();

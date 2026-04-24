@@ -53,6 +53,7 @@ export default function VendorPage() {
 
     let ws = null;
     let reconnectTimeout = null;
+    let pingInterval = null;
 
     const connectWebSocket = () => {
       // Build WS URL
@@ -66,6 +67,12 @@ export default function VendorPage() {
         setApiError(null);
         setPolling(true); // Re-using this flag as 'connected' indicator visually
         fetchRequests(); // Fetch full state to sync
+        
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
       };
 
       ws.onmessage = (event) => {
@@ -97,10 +104,15 @@ export default function VendorPage() {
             return prev;
           });
           setLastUpdated(new Date());
+        } else if (payload.type === 'remove_request') {
+          setRequests(prev => prev.filter(r => r.id !== payload.request_id));
+          setLastUpdated(new Date());
+          if (activeChatRequest === payload.request_id) setActiveChatRequest(null);
         }
       };
 
       ws.onclose = () => {
+        if (pingInterval) clearInterval(pingInterval);
         setPolling(false);
         setApiError('Connection lost. Reconnecting...');
         reconnectTimeout = setTimeout(connectWebSocket, 3000);
@@ -111,6 +123,7 @@ export default function VendorPage() {
 
     return () => {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (pingInterval) clearInterval(pingInterval);
       if (ws) {
         ws.onclose = null; 
         ws.close();

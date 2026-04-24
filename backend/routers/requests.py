@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from database import get_db
 import models
 import schemas
-from ws_manager import manager, get_grid_cell
+from ws_manager import manager, get_request_broadcast_cells
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
@@ -31,10 +31,11 @@ def create_request(req: schemas.RequestCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_req)
     
-    # Broadcast to geo bucket
-    cell = get_grid_cell(db_req.latitude, db_req.longitude)
+    # Broadcast to geo buckets (3x3 safety net)
+    cells = get_request_broadcast_cells(db_req.latitude, db_req.longitude)
     payload = {"type": "new_request", "data": jsonable_encoder(db_req)}
-    asyncio.create_task(manager.broadcast(cell, payload))
+    for cell in cells:
+        asyncio.create_task(manager.broadcast(cell, payload))
     
     return db_req
 
@@ -131,8 +132,9 @@ def accept_request(request_id: int, payload: schemas.RequestAccept, db: Session 
     req = db.query(models.Request).get(request_id)
     
     payload = {"type": "status_update", "data": jsonable_encoder(req)}
-    cell = get_grid_cell(req.latitude, req.longitude)
-    asyncio.create_task(manager.broadcast(cell, payload))
+    cells = get_request_broadcast_cells(req.latitude, req.longitude)
+    for cell in cells:
+        asyncio.create_task(manager.broadcast(cell, payload))
     asyncio.create_task(manager.broadcast(f"request_{request_id}", payload))
     
     return req
@@ -178,9 +180,14 @@ def update_status(request_id: int, payload: schemas.RequestStatusUpdate, db: Ses
     db.commit()
     db.refresh(req)
     
-    payload = {"type": "status_update", "data": jsonable_encoder(req)}
-    cell = get_grid_cell(req.latitude, req.longitude)
-    asyncio.create_task(manager.broadcast(cell, payload))
+    if req.status in ["completed", "cancelled"]:
+        payload = {"type": "remove_request", "request_id": request_id}
+    else:
+        payload = {"type": "status_update", "data": jsonable_encoder(req)}
+        
+    cells = get_request_broadcast_cells(req.latitude, req.longitude)
+    for cell in cells:
+        asyncio.create_task(manager.broadcast(cell, payload))
     asyncio.create_task(manager.broadcast(f"request_{request_id}", payload))
     
     return req
